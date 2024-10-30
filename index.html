@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>轮盘连线游戏</title>
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: Arial, sans-serif;
+  }
+  #gameArea {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 20px;
+  }
+  .circle {
+    fill: #ADD8E6;
+    cursor: pointer;
+  }
+  .selected {
+    fill: #FFD700;
+  }
+  .connected {
+    fill: #A9A9A9;
+  }
+  #score {
+    font-size: 1.5em;
+    margin-top: 20px;
+  }
+  #mode {
+    margin: 10px;
+  }
+  line {
+    stroke: black;
+    stroke-width: 2;
+  }
+</style>
+</head>
+<body>
+
+<h1>轮盘连线游戏</h1>
+<p id="mode">模式：<span id="currentMode">填数字</span></p>
+<button onclick="toggleMode()">切换模式</button>
+<div id="gameArea">
+  <svg id="svgCanvas" width="300" height="300"></svg>
+</div>
+<p id="score">总得分：<span id="totalScore">0</span></p>
+
+<script>
+  const svgCanvas = document.getElementById("svgCanvas");
+  const totalScore = document.getElementById("totalScore");
+  const currentMode = document.getElementById("currentMode");
+  let mode = "fill";
+  let score = 0;
+  let numbers = Array(10).fill(null);
+  let currentNumber = 0; // 填数字模式下的起始数字
+  let connections = [];
+  let selectedCircles = [];
+  let usedCircles = new Set();
+
+  const radius = 20; // 每个圆的半径
+
+  // 在SVG画布上创建圆形布局
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * (2 * Math.PI);
+    const x = 150 + 120 * Math.cos(angle);
+    const y = 150 + 120 * Math.sin(angle);
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", radius);
+    circle.setAttribute("class", "circle");
+    circle.setAttribute("data-index", i);
+    circle.addEventListener("click", onCircleClick);
+
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", x);
+    text.setAttribute("y", y + 5); // 调整文本位置
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "16px");
+    text.setAttribute("fill", "black");
+    text.setAttribute("data-index", i);
+
+    svgCanvas.appendChild(circle);
+    svgCanvas.appendChild(text);
+  }
+
+  function onCircleClick(e) {
+    const index = parseInt(e.target.getAttribute("data-index"));
+    const circle = e.target;
+    const textElement = svgCanvas.querySelector(`text[data-index='${index}']`);
+
+    if (mode === "fill") {
+      // 填数字模式：自动依次填入0到9的数字
+      if (currentNumber <= 9 && numbers[index] === null) {
+        textElement.textContent = currentNumber;
+        numbers[index] = currentNumber;
+        currentNumber++;
+      } else if (currentNumber > 9) {
+        alert("已填入所有数字（0到9）。");
+      }
+    } else if (mode === "connect") {
+      // 连线模式：选择两个圆并绘制线条，避免交叉
+      if (numbers[index] === null) {
+        alert("请先在所有圆内填入数字。");
+        return;
+      }
+      if (usedCircles.has(index)) {
+        alert("该点已被使用，无法再次选择。");
+        return;
+      }
+
+      selectedCircles.push(index);
+      circle.classList.add("selected");
+
+      if (selectedCircles.length === 2) {
+        const [first, second] = selectedCircles;
+        if (!isConnected(first, second) && !doesIntersect(first, second)) {
+          connectCircles(first, second);
+          const product = numbers[first] * numbers[second];
+          score += product;
+          totalScore.textContent = score;
+          usedCircles.add(first);
+          usedCircles.add(second);
+          svgCanvas.querySelector(`circle[data-index='${first}']`).classList.add("connected");
+          svgCanvas.querySelector(`circle[data-index='${second}']`).classList.add("connected");
+        } else {
+          alert("无效连接：线条不能交叉。");
+        }
+        clearSelection();
+      }
+    }
+  }
+
+  function toggleMode() {
+    mode = mode === "fill" ? "connect" : "fill";
+    currentMode.textContent = mode === "fill" ? "填数字" : "连线";
+    clearSelection();
+    if (mode === "fill") {
+      // 重新填数字模式
+      currentNumber = 0;
+      numbers.fill(null);
+      usedCircles.clear();
+      connections = [];
+      while (svgCanvas.lastChild) {
+        svgCanvas.removeChild(svgCanvas.lastChild);
+      }
+      // 重新创建圆和文本
+      for (let i = 0; i < 10; i++) {
+        const angle = (i / 10) * (2 * Math.PI);
+        const x = 150 + 120 * Math.cos(angle);
+        const y = 150 + 120 * Math.sin(angle);
+
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", x);
+        circle.setAttribute("cy", y);
+        circle.setAttribute("r", radius);
+        circle.setAttribute("class", "circle");
+        circle.setAttribute("data-index", i);
+        circle.addEventListener("click", onCircleClick);
+
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x);
+        text.setAttribute("y", y + 5);
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("font-size", "16px");
+        text.setAttribute("fill", "black");
+        text.setAttribute("data-index", i);
+
+        svgCanvas.appendChild(circle);
+        svgCanvas.appendChild(text);
+      }
+    }
+  }
+
+  function connectCircles(index1, index2) {
+    const circle1 = svgCanvas.querySelector(`circle[data-index='${index1}']`);
+    const circle2 = svgCanvas.querySelector(`circle[data-index='${index2}']`);
+
+    // 获取中心坐标
+    const x1 = parseFloat(circle1.getAttribute("cx"));
+    const y1 = parseFloat(circle1.getAttribute("cy"));
+    const x2 = parseFloat(circle2.getAttribute("cx"));
+    const y2 = parseFloat(circle2.getAttribute("cy"));
+
+    // 计算角度并将每个点偏移半径，以从边缘开始连线
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const offsetX = radius * Math.cos(angle);
+    const offsetY = radius * Math.sin(angle);
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1 + offsetX);
+    line.setAttribute("y1", y1 + offsetY);
+    line.setAttribute("x2", x2 - offsetX);
+    line.setAttribute("y2", y2 - offsetY);
+    line.setAttribute("stroke", "black");
+    line.setAttribute("stroke-width", 2);
+    svgCanvas.appendChild(line);
+
+    connections.push([index1, index2]);
+  }
+
+  function isConnected(index1, index2) {
+    return connections.some(pair => (pair[0] === index1 && pair[1] === index2) || (pair[0] === index2 && pair[1] === index1));
+  }
+
+  function doesIntersect(index1, index2) {
+    const [x1, y1] = getCoordinates(index1);
+    const [x2, y2] = getCoordinates(index2);
+
+    return connections.some(([i, j]) => {
+      const [x3, y3] = getCoordinates(i);
+      const [x4, y4] = getCoordinates(j);
+
+      return intersect(x1, y1, x2, y2, x3, y3, x4, y4);
+    });
+  }
+
+  function getCoordinates(index) {
+    const circle = svgCanvas.querySelector(`circle[data-index='${index}']`);
+    return [parseFloat(circle.getAttribute("cx")), parseFloat(circle.getAttribute("cy"))];
+  }
+
+  function intersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+    const det = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+    if (det === 0) return false; // 平行线
+    const lambda = ((y4 - y3) * (x4 - x1) + (x3 - x4) * (y4 - y1)) / det;
+    const gamma = ((y1 - y2) * (x4 - x1) + (x2 - x1) * (y4 - y1)) / det;
+    return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
+  }
+
+  function clearSelection() {
+    selectedCircles = [];
+    svgCanvas.querySelectorAll(".circle").forEach(circle => circle.classList.remove("selected"));
+  }
+</script>
+
+</body>
+</html>
